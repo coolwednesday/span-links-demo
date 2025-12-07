@@ -61,15 +61,20 @@ A Go demonstration of OpenTelemetry Span Links for correlating operations across
 
 ## Running Examples
 
-```bash
-# Fan-out: One batch → Multiple workers
-go run ./examples/common.go ./examples/fanout.go
+The examples are functions that demonstrate different Span Links patterns:
 
-# Fan-in: Multiple producers → One aggregator
-go run ./examples/common.go ./examples/fanin.go
+- **FanOutExample**: One batch → Multiple workers
+- **FanInExample**: Multiple producers → One aggregator  
+- **RetryExample**: Retry attempts with links
 
-# Retry: Retry attempts with links
-go run ./examples/common.go ./examples/retry.go
+Import and use them in your code:
+```go
+import "span-links-signoz-demo/examples"
+
+// In your main function after initializing OpenTelemetry
+examples.FanOutExample(ctx)
+examples.FanInExample(ctx)
+examples.RetryExample(ctx)
 ```
 
 ## Viewing Span Links in SigNoz

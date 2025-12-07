@@ -1,47 +1,17 @@
-package main
+package examples
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"math/rand"
 	"time"
 
-	"github.com/joho/godotenv"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
-
-func init() {
-	// Load .env file if it exists
-	_ = godotenv.Load()
-	_ = godotenv.Load("../.env") // Also try parent directory
-	rand.Seed(time.Now().UnixNano())
-}
-
-func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Initialize OpenTelemetry
-	providers, err := InitTracer(ctx)
-	if err != nil {
-		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
-	}
-	defer shutdownProviders(providers)
-
-	// Setup logging
-	SetupLogging(providers.LoggerProvider)
-
-	// Run retry example
-	RetryExample(ctx)
-
-	// Give time for traces to export
-	time.Sleep(2 * time.Second)
-}
 
 // RetryExample demonstrates retry pattern with Span Links
 // Each retry attempt links back to the original attempt

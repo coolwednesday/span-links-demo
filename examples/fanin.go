@@ -1,46 +1,17 @@
-package main
+package examples
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
-
-func init() {
-	// Load .env file if it exists
-	_ = godotenv.Load()
-	_ = godotenv.Load("../.env") // Also try parent directory
-}
-
-func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Initialize OpenTelemetry
-	providers, err := InitTracer(ctx)
-	if err != nil {
-		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
-	}
-	defer shutdownProviders(providers)
-
-	// Setup logging
-	SetupLogging(providers.LoggerProvider)
-
-	// Run fan-in example
-	FanInExample(ctx)
-
-	// Give time for traces to export
-	time.Sleep(2 * time.Second)
-}
 
 // FanInExample demonstrates many-to-one pattern with Span Links
 // Multiple producers create items, one aggregator collects them

@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8.11.4-alpine
+    container_name: signoz-clickhouse
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DB=signoz
+      - CLICKHOUSE_USER=signoz
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=ComplexPass#123
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.88.0
+    container_name: signoz-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    depends_on:
+      - clickhouse
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8888/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  query-service:
+    image: signoz/query-service:0.88.0
+    container_name: signoz-query-service
+    depends_on:
+      - clickhouse
+      - otel-collector
+    environment:
+      - ClickHouseUrl=tcp://clickhouse:9000
+      - ALERTMANAGER_API_PREFIX=http://localhost:9093/api/v1
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    image: signoz/frontend:0.88.0
+    container_name: signoz-frontend
+    depends_on:
+      - query-service
+    environment:
+      - REACT_APP_BASE_API=http://localhost:8080
+    ports:
+      - "3301:3301"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:3301"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  clickhouse-data:
+

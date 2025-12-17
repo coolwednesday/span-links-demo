@@ -28,6 +28,27 @@ go run ./examples/cmd/same_trace_span_links
 What to look for in SigNoz:
 - One trace with multiple shard spans + an aggregator span with links (same TraceID).
 
+### Fan-out (one producer → many workers; different traces linked)
+
+```bash
+export OTEL_SERVICE_NAME="fanout"
+go run ./examples/cmd/fanout
+```
+
+### Fan-in (many producers → one aggregator; different traces linked)
+
+```bash
+export OTEL_SERVICE_NAME="fanin"
+go run ./examples/cmd/fanin
+```
+
+### Retry chain (attempts linked)
+
+```bash
+export OTEL_SERVICE_NAME="retry"
+go run ./examples/cmd/retry
+```
+
 ### Remote parent pitfall (parent-child across async via remote context)
 
 ```bash

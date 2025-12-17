@@ -3,7 +3,7 @@ package examples
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"log"
 	"sync"
 	"time"
 
@@ -30,7 +30,7 @@ func FanInExample(ctx context.Context) {
 			defer wg.Done()
 
 			// Each producer creates its own span
-			producerCtx, producerSpan := tracer.Start(context.Background(), "ProduceItem",
+			_, producerSpan := tracer.Start(context.Background(), "ProduceItem",
 				trace.WithAttributes(
 					attribute.Int("producer.id", producerID),
 					attribute.String("item.value", fmt.Sprintf("value-%d", producerID)),
@@ -42,9 +42,7 @@ func FanInExample(ctx context.Context) {
 			producerSpansChan <- producerSpan.SpanContext()
 
 			// Simulate production
-			slog.InfoContext(producerCtx, "Producer creating item",
-				slog.Int("producer.id", producerID),
-			)
+			log.Printf("Producer creating item (producer.id=%d)", producerID)
 			time.Sleep(150 * time.Millisecond)
 
 			results <- fmt.Sprintf("item-from-producer-%d", producerID)
@@ -88,9 +86,7 @@ func FanInExample(ctx context.Context) {
 	aggregated := []string{}
 	for result := range results {
 		aggregated = append(aggregated, result)
-		slog.InfoContext(ctx, "Aggregated item",
-			slog.String("item", result),
-		)
+		log.Printf("Aggregated item (item=%s)", result)
 	}
 
 	aggregatorSpan.AddEvent("Aggregation completed",
@@ -99,7 +95,5 @@ func FanInExample(ctx context.Context) {
 		),
 	)
 
-	slog.InfoContext(ctx, "Aggregation completed",
-		slog.Int("items.count", len(aggregated)),
-	)
+	log.Printf("Aggregation completed (items.count=%d)", len(aggregated))
 }

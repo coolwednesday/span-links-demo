@@ -3,7 +3,7 @@ package examples
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"log"
 	"math/rand"
 	"time"
 
@@ -34,20 +34,14 @@ func RetryExample(ctx context.Context) {
 	originalSpan.End()
 
 	if success {
-		slog.InfoContext(ctx, "Request processed successfully on first attempt",
-			slog.String("request.id", requestID),
-		)
+		log.Printf("Request processed successfully on first attempt (request.id=%s)", requestID)
 		return
 	}
 
 	// Retry logic with Span Links
 	maxRetries := 3
 	for attempt := 2; attempt <= maxRetries; attempt++ {
-		slog.InfoContext(ctx, "Retrying request",
-			slog.String("request.id", requestID),
-			slog.Int("attempt", attempt),
-			slog.Int("max_retries", maxRetries),
-		)
+		log.Printf("Retrying request (request.id=%s attempt=%d max_retries=%d)", requestID, attempt, maxRetries)
 
 		// Create a link to the original span
 		link := trace.Link{
@@ -74,10 +68,7 @@ func RetryExample(ctx context.Context) {
 		retrySpan.End()
 
 		if success {
-			slog.InfoContext(retryCtx, "Request processed successfully",
-				slog.String("request.id", requestID),
-				slog.Int("attempt", attempt),
-			)
+			log.Printf("Request processed successfully (request.id=%s attempt=%d)", requestID, attempt)
 			return
 		}
 
@@ -86,10 +77,7 @@ func RetryExample(ctx context.Context) {
 		time.Sleep(backoff)
 	}
 
-	slog.ErrorContext(ctx, "Request failed after all retry attempts",
-		slog.String("request.id", requestID),
-		slog.Int("max_retries", maxRetries),
-	)
+	log.Printf("Request failed after all retry attempts (request.id=%s max_retries=%d)", requestID, maxRetries)
 }
 
 // simulateProcessing simulates a processing operation that might fail

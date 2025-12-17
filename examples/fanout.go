@@ -2,7 +2,7 @@ package examples
 
 import (
 	"context"
-	"log/slog"
+	"log"
 	"sync"
 	"time"
 
@@ -30,10 +30,7 @@ func FanOutExample(ctx context.Context) {
 	batchID := uuid.New().String()
 	items := []string{"item-1", "item-2", "item-3", "item-4", "item-5"}
 
-	slog.InfoContext(ctx, "Creating batch",
-		slog.String("batch.id", batchID),
-		slog.Int("items.count", len(items)),
-	)
+	log.Printf("Creating batch (batch.id=%s items.count=%d)", batchID, len(items))
 
 	// Fan-out: Process each item in parallel with Span Links
 	var wg sync.WaitGroup
@@ -53,7 +50,7 @@ func FanOutExample(ctx context.Context) {
 			}
 
 			// Create a new span with link (new trace, but linked to batch)
-			itemCtx, itemSpan := tracer.Start(context.Background(), "ProcessItem",
+			_, itemSpan := tracer.Start(context.Background(), "ProcessItem",
 				trace.WithLinks(link),
 				trace.WithAttributes(
 					attribute.String("item.id", itemID),
@@ -64,10 +61,7 @@ func FanOutExample(ctx context.Context) {
 			defer itemSpan.End()
 
 			// Simulate processing
-			slog.InfoContext(itemCtx, "Processing item",
-				slog.String("item.id", itemID),
-				slog.String("batch.id", batchID),
-			)
+			log.Printf("Processing item (item.id=%s batch.id=%s)", itemID, batchID)
 			time.Sleep(200 * time.Millisecond)
 
 			itemSpan.AddEvent("Item processed",
@@ -87,8 +81,5 @@ func FanOutExample(ctx context.Context) {
 		),
 	)
 
-	slog.InfoContext(ctx, "Batch processing completed",
-		slog.String("batch.id", batchID),
-		slog.Int("processed.count", len(items)),
-	)
+	log.Printf("Batch processing completed (batch.id=%s processed.count=%d)", batchID, len(items))
 }

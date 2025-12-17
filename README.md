@@ -1,6 +1,6 @@
 # Span Links Demo (SigNoz)
 
-Go demos of OpenTelemetry span links, including queue/worker (backward links), optional forward-link demo, same-trace scatter/gather, and a remote-parent pitfall visualisation in Signoz.
+Go demos of OpenTelemetry span links, including queue/worker (backward links), optional forward-link demo, same-trace scatter/gather, and a remote-parent pitfall visualisation in SigNoz.
 
 ## Run (SigNoz Cloud)
 ```bash
@@ -11,7 +11,7 @@ go mod download
 go run .
 ```
 
-Tip: copy `ENV.example` → `.env` and edit it, then just run `go run .`.
+Tip: copy `ENV.example` → `.env` and edit it, then just run `go run .` (this repo auto-loads `.env` if present).
 
 ## Modes (root app)
 - Backward links (default): runs **one batch of 10 orders**. Consumers link back to producer (backward links).
@@ -29,6 +29,8 @@ Tip: copy `ENV.example` → `.env` and edit it, then just run `go run .`.
 ```
 ├── main.go / producer.go / worker.go / queue.go / otel.go / constants.go
 ├── docker-compose.yml
+├── otel-collector-config.yaml
+├── Makefile
 └── examples/
     ├── fanout.go
     ├── fanin.go
@@ -36,6 +38,9 @@ Tip: copy `ENV.example` → `.env` and edit it, then just run `go run .`.
     ├── same_trace_span_links.go          # same-trace links (N:1)
     ├── README.md
     └── cmd/
+        ├── fanout/main.go                # runnable fanout example
+        ├── fanin/main.go                 # runnable fanin example
+        ├── retry/main.go                 # runnable retry example
         ├── same_trace_span_links/main.go # runnable same-trace example
         └── remote-parent-gap/main.go     # parent-child async pitfall (remote context)
 ```

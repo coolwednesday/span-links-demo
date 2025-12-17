@@ -8,11 +8,11 @@ help: ## Show this help message
 
 run: ## Run the application
 	@echo "Running span-links-demo..."
-	@go run main.go
+	@go run .
 
 build: ## Build the application
 	@echo "Building span-links-demo..."
-	@go build -o span-links-demo main.go
+	@go build -o span-links-demo .
 	@echo "Built: ./span-links-demo"
 
 clean: ## Clean build artifacts
@@ -50,13 +50,19 @@ examples: ## Run example patterns
 	@echo "Running examples..."
 	@echo ""
 	@echo "=== Fan-out Example ==="
-	@go run examples/fanout.go
+	@go run ./examples/cmd/fanout
 	@echo ""
 	@echo "=== Fan-in Example ==="
-	@go run examples/fanin.go
+	@go run ./examples/cmd/fanin
 	@echo ""
 	@echo "=== Retry Example ==="
-	@go run examples/retry.go
+	@go run ./examples/cmd/retry
+	@echo ""
+	@echo "=== Same-trace span links ==="
+	@go run ./examples/cmd/same_trace_span_links
+	@echo ""
+	@echo "=== Remote parent gap ==="
+	@go run ./examples/cmd/remote-parent-gap
 
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."

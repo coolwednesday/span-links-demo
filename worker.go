@@ -5,81 +5,40 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"log/slog"
 	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // WorkerService processes orders from the queue with observability instrumentation
 type WorkerService struct {
-	queue                  *SimpleQueue
-	tracer                 trace.Tracer
-	meter                  metric.Meter
-	ordersProcessedCounter metric.Int64Counter
-	processingDurationHist metric.Float64Histogram
-	queueDepthGauge        metric.Int64ObservableGauge
-	activeOrders           int64
+	queue        *SimpleQueue
+	tracer       trace.Tracer
+	activeOrders int64
+	spanCtxSink  chan OrderSpanContext
+}
+
+// OrderSpanContext is used to emit consumer span contexts back to the producer.
+type OrderSpanContext struct {
+	OrderID string
+	Ctx     trace.SpanContext
 }
 
 // NewWorkerService creates a new worker service with metrics instrumentation
 func NewWorkerService(queue *SimpleQueue) *WorkerService {
-	meter := otel.Meter("worker-service")
-
-	// Create metrics instruments
-	ordersProcessed, err := meter.Int64Counter("orders.processed",
-		metric.WithDescription("Total orders processed"),
-	)
-	if err != nil {
-		log.Printf("Failed to create orders.processed counter: %v", err)
+	return &WorkerService{
+		queue:  queue,
+		tracer: otel.Tracer("worker-service"),
 	}
+}
 
-	processingDuration, err := meter.Float64Histogram("processing.duration",
-		metric.WithDescription("Order processing duration in seconds"),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		log.Printf("Failed to create processing.duration histogram: %v", err)
-	}
-
-	queueDepth, err := meter.Int64ObservableGauge("queue.depth",
-		metric.WithDescription("Current queue depth"),
-		metric.WithUnit("1"),
-	)
-	if err != nil {
-		log.Printf("Failed to create queue.depth gauge: %v", err)
-	}
-
-	ws := &WorkerService{
-		queue:                  queue,
-		tracer:                 otel.Tracer("worker-service"),
-		meter:                  meter,
-		ordersProcessedCounter: ordersProcessed,
-		processingDurationHist: processingDuration,
-		queueDepthGauge:        queueDepth,
-	}
-
-	// Register callback for queue depth observable gauge
-	if queueDepth != nil {
-		_, err = meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
-			queueLen := int64(ws.queue.Length())
-			o.ObserveInt64(queueDepth, queueLen,
-				metric.WithAttributes(
-					attribute.String("metric.type", "gauge"),
-				),
-			)
-			return nil
-		}, queueDepth)
-		if err != nil {
-			log.Printf("Failed to register queue depth callback: %v", err)
-		}
-	}
-
-	return ws
+// SetSpanContextSink sets an optional channel to emit finished processing span contexts
+// (used for forward-link demo). If nil, no emission is performed.
+func (w *WorkerService) SetSpanContextSink(ch chan OrderSpanContext) {
+	w.spanCtxSink = ch
 }
 
 // ProcessOrders continuously consumes and processes orders from the queue
@@ -98,11 +57,7 @@ func (w *WorkerService) ProcessOrders(ctx context.Context, workerID string) {
 			}
 
 			if err := w.processOrderWithLink(ctx, order, workerID); err != nil {
-				slog.ErrorContext(ctx, "Failed to process order",
-					slog.String(LogKeyOrderID, order.ID),
-					slog.String(LogKeyWorkerID, workerID),
-					slog.String(LogKeyError, err.Error()),
-				)
+				log.Printf("Failed to process order %s (worker=%s): %v", order.ID, workerID, err)
 			}
 		}
 	}
@@ -142,10 +97,7 @@ func (w *WorkerService) processOrderWithLink(ctx context.Context, order Order, w
 	atomic.AddInt64(&w.activeOrders, 1)
 	defer atomic.AddInt64(&w.activeOrders, -1)
 
-	slog.InfoContext(ctx, "Order processing started",
-		slog.String(LogKeyWorkerID, workerID),
-		slog.Float64(LogKeyAmount, order.Amount),
-	)
+	log.Printf("Order processing started (order=%s worker=%s amount=%.2f)", order.ID, workerID, order.Amount)
 
 	// Process order steps
 	if err := w.validateOrder(ctx, order); err != nil {
@@ -163,29 +115,17 @@ func (w *WorkerService) processOrderWithLink(ctx context.Context, order Order, w
 		return fmt.Errorf("shipping failed: %w", err)
 	}
 
-	// Record metrics
 	duration := time.Since(startTime).Seconds()
-	if w.ordersProcessedCounter != nil {
-		w.ordersProcessedCounter.Add(ctx, 1,
-			metric.WithAttributes(
-				attribute.String("order.status", "success"),
-				attribute.String("worker.id", workerID),
-			),
-		)
-	}
+	log.Printf("Order processing completed successfully (order=%s worker=%s duration=%.2fs)", order.ID, workerID, duration)
 
-	if w.processingDurationHist != nil {
-		w.processingDurationHist.Record(ctx, duration,
-			metric.WithAttributes(
-				attribute.String("worker.id", workerID),
-			),
-		)
+	// Emit span context for optional forward-linking demo
+	if w.spanCtxSink != nil {
+		select {
+		case w.spanCtxSink <- OrderSpanContext{OrderID: order.ID, Ctx: span.SpanContext()}:
+		default:
+			// drop if channel full
+		}
 	}
-
-	slog.InfoContext(ctx, "Order processing completed successfully",
-		slog.String(LogKeyWorkerID, workerID),
-		slog.Float64(LogKeyDuration, duration),
-	)
 
 	return nil
 }
@@ -213,9 +153,7 @@ func (w *WorkerService) processPayment(ctx context.Context, order Order) error {
 
 	time.Sleep(PaymentTimeout)
 
-	slog.InfoContext(ctx, "Payment processed successfully",
-		slog.Float64(LogKeyAmount, order.Amount),
-	)
+	log.Printf("Payment processed successfully (order=%s amount=%.2f)", order.ID, order.Amount)
 
 	return nil
 }
@@ -231,9 +169,7 @@ func (w *WorkerService) shipOrder(ctx context.Context, order Order) error {
 
 	time.Sleep(ShippingTimeout)
 
-	slog.InfoContext(ctx, "Order shipped to customer",
-		slog.String(LogKeyCustomerID, order.CustomerID),
-	)
+	log.Printf("Order shipped to customer (order=%s customer=%s)", order.ID, order.CustomerID)
 
 	return nil
 }

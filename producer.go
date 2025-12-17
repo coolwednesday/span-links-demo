@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,10 +28,25 @@ func NewProducerService(queue *SimpleQueue) *ProducerService {
 }
 
 // PublishOrderBatch publishes multiple orders to the queue and returns the span context
-// for workers to link back to
+// for workers to link back to.
+// The documentation refers to actions performed in publishInternal to simplify removing the complexity of dual/backward linking.
 func (p *ProducerService) PublishOrderBatch(ctx context.Context, count int) (trace.SpanContext, error) {
+	span, _, _, err := p.publishInternal(ctx, count, false)
+	if err != nil {
+		return trace.SpanContext{}, err
+	}
+	return span.SpanContext(), nil
+}
+
+// PublishOrderBatchWithOpenSpan publishes orders and returns the open batch span
+// (caller must End it) along with per-order spans and the count published. Used for forward-link demo.
+func (p *ProducerService) PublishOrderBatchWithOpenSpan(ctx context.Context, count int) (trace.Span, map[string]trace.Span, int, error) {
+	return p.publishInternal(ctx, count, true)
+}
+
+func (p *ProducerService) publishInternal(ctx context.Context, count int, keepOpen bool) (trace.Span, map[string]trace.Span, int, error) {
 	if count <= 0 {
-		return trace.SpanContext{}, errors.New("batch size must be greater than zero")
+		return nil, nil, 0, errors.New("batch size must be greater than zero")
 	}
 
 	ctx, span := p.tracer.Start(ctx, "PublishOrderBatch",
@@ -40,9 +55,9 @@ func (p *ProducerService) PublishOrderBatch(ctx context.Context, count int) (tra
 			attribute.Int("order.batch.size", count),
 		),
 	)
-	defer span.End()
 
 	var publishedCount int
+	orderSpans := make(map[string]trace.Span, count)
 	var lastErr error
 
 	for i := 0; i < count; i++ {
@@ -70,12 +85,18 @@ func (p *ProducerService) PublishOrderBatch(ctx context.Context, count int) (tra
 		}
 
 		publishedCount++
-		pubSpan.End()
+		orderSpans[order.ID] = pubSpan
+		if !keepOpen {
+			pubSpan.End()
+		}
 	}
 
 	if publishedCount == 0 {
 		span.RecordError(lastErr)
-		return trace.SpanContext{}, fmt.Errorf("failed to publish any orders: %w", lastErr)
+		if !keepOpen {
+			span.End()
+		}
+		return span, orderSpans, 0, fmt.Errorf("failed to publish any orders: %w", lastErr)
 	}
 
 	span.AddEvent("Batch published",
@@ -85,9 +106,15 @@ func (p *ProducerService) PublishOrderBatch(ctx context.Context, count int) (tra
 		),
 	)
 
-	slog.InfoContext(ctx, "Order batch published successfully",
-		slog.Int(LogKeyBatchSize, publishedCount),
-	)
+	log.Printf("Order batch published successfully (published=%d)", publishedCount)
 
-	return span.SpanContext(), nil
+	if !keepOpen {
+		span.End()
+		for _, s := range orderSpans {
+			s.End()
+		}
+	}
+
+	// When keepOpen, caller is responsible to End batch span and any order spans it keeps open.
+	return span, orderSpans, publishedCount, nil
 }

@@ -12,20 +12,7 @@ const (
 // Queue configuration
 const (
 	DefaultQueueCapacity = 100
-	DefaultBatchSize     = 3
+	DefaultBatchSize     = 10
 	DefaultWorkerCount   = 2
 	BatchPublishInterval = 2 * time.Second
 )
-
-// Log message keys for consistent logging
-const (
-	LogKeyOrderID     = "order.id"
-	LogKeyCustomerID  = "customer.id"
-	LogKeyWorkerID    = "worker.id"
-	LogKeyAmount      = "order.amount"
-	LogKeyStatus      = "status"
-	LogKeyDuration    = "duration_seconds"
-	LogKeyBatchSize   = "batch.size"
-	LogKeyError       = "error"
-)
-

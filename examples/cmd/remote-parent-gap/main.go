@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,15 @@ func main() {
 
 	tracer := otel.Tracer("remote-parent-gap")
 
+	// Artificial delay to make the "gap" visible in UIs (simulates queue/scheduler delay).
+	// Set REMOTE_PARENT_GAP_DELAY_MS to control it.
+	delay := 2000 * time.Millisecond
+	if v := os.Getenv("REMOTE_PARENT_GAP_DELAY_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			delay = time.Duration(ms) * time.Millisecond
+		}
+	}
+
 	// Channel simulates a remote handoff of the parent context
 	carrierCh := make(chan propagation.MapCarrier, 1)
 
@@ -44,6 +54,7 @@ func main() {
 	parentCtx, parentSpan := tracer.Start(ctx, "ParentRequest",
 		trace.WithAttributes(
 			attribute.String("note", "ends immediately"),
+			attribute.Int64("demo.gap_delay_ms", delay.Milliseconds()),
 		),
 	)
 	parentSpan.End()
@@ -53,11 +64,14 @@ func main() {
 	carrierCh <- carrier
 	close(carrierCh)
 
-	// Async worker starts when it receives the carrier (no artificial sleep)
+	// Async worker starts when it receives the carrier (after an artificial delay)
 	go func() {
 		carrier, ok := <-carrierCh
 		if !ok {
 			return
+		}
+		if delay > 0 {
+			time.Sleep(delay)
 		}
 		remoteCtx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
 
@@ -65,15 +79,16 @@ func main() {
 			trace.WithSpanKind(trace.SpanKindConsumer),
 			trace.WithAttributes(
 				attribute.String("note", "remote-parent-handshake"),
+				attribute.Int64("demo.gap_delay_ms", delay.Milliseconds()),
 			),
 		)
 		// Do real work here if desired (no sleep needed)
 		childSpan.End()
 	}()
 
-	// Give the worker a brief window to run before process exit
-	time.Sleep(500 * time.Millisecond)
-	log.Println("Done. In SigNoz, you’ll see one trace: parent ends immediately; child starts later via remote context, inflating apparent end-to-end duration.")
+	// Give the worker enough time to run + export before process exit.
+	time.Sleep(delay + 1500*time.Millisecond)
+	log.Printf("Done. In SigNoz, you’ll see one trace: parent ends immediately; child starts later via remote context after %s, inflating apparent end-to-end duration.", delay)
 }
 
 // Trace-only setup

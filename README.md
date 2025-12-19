@@ -50,5 +50,49 @@ Tip: copy `ENV.example` → `.env` and edit it, then just run `go run .` (this r
 - Open spans and check **Links** for backward/forward links.
 - To find children from producer side, filter by `batch.id` or `order.id`.
 
+## Running Examples
+
+### Interactive Test Runner (Recommended)
+Run the interactive test script that prompts for OTEL endpoint and headers, then executes all example programs:
+
+```bash
+./run_tests.sh
+```
+
+The script will:
+1. Prompt for `OTEL_EXPORTER_OTLP_ENDPOINT` (SigNoz Cloud or local)
+2. Prompt for `OTEL_EXPORTER_OTLP_HEADERS` (optional, needed for SigNoz Cloud)
+3. Prompt for `OTEL_SERVICE_NAME` (optional, defaults to `span-links-demo`)
+4. Run all example programs and verify they complete successfully
+
+### Examples Run by the Script
+- ✅ Same-trace scatter/gather (`examples/cmd/same_trace_span_links`)
+- ✅ Fan-out pattern (`examples/cmd/fanout`)
+- ✅ Fan-in pattern (`examples/cmd/fanin`)
+- ✅ Retry pattern (`examples/cmd/retry`)
+- ✅ Remote parent gap pitfall (`examples/cmd/remote-parent-gap`)
+- ✅ Producer/consumer with backward links (main app, default mode)
+- ✅ Producer/consumer with forward links (main app, `ENABLE_FORWARD_LINKS_TO_PRODUCER=true`)
+
+### Manual Execution
+Run individual examples manually:
+
+```bash
+# Set up environment
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://ingest.<REGION>.signoz.cloud:443"
+export OTEL_EXPORTER_OTLP_HEADERS="signoz-ingestion-key=<YOUR_KEY>"
+
+# Run examples
+export OTEL_SERVICE_NAME="same-trace-span-links" && go run ./examples/cmd/same_trace_span_links
+export OTEL_SERVICE_NAME="fanout" && go run ./examples/cmd/fanout
+export OTEL_SERVICE_NAME="fanin" && go run ./examples/cmd/fanin
+export OTEL_SERVICE_NAME="retry" && go run ./examples/cmd/retry
+export OTEL_SERVICE_NAME="remote-parent-gap" && go run ./examples/cmd/remote-parent-gap
+
+# Run main producer/consumer
+export OTEL_SERVICE_NAME="span-links-demo" && go run .
+export OTEL_SERVICE_NAME="span-links-demo-forward" && ENABLE_FORWARD_LINKS_TO_PRODUCER=true go run .
+```
+
 ## License
 MIT

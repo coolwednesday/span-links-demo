@@ -33,14 +33,22 @@ func SameTraceSpanLinks(ctx context.Context) {
 	shardIDs := []string{"shard-a", "shard-b", "shard-c", "shard-d"}
 	workerSpanContexts := make([]trace.SpanContext, len(shardIDs))
 
-	// Aggregator span (can be referenced by workers if forward links are enabled)
-	aggCtx, aggSpan := tracer.Start(ctx, "AggregateResults",
-		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String("aggregation.mode", "same_trace_span_links"),
-		),
-	)
-	aggSpanCtx := aggSpan.SpanContext()
+	// If you want worker spans to link *forward* to the aggregator, the aggregator must exist
+	// while workers run (so they can reference its SpanContext). This makes the aggregator
+	// span duration overlap with the workers by design.
+	var aggSpanCtx trace.SpanContext
+	var aggSpan trace.Span
+	var aggCtx context.Context
+	if enableForwardLinksToAggregator {
+		aggCtx, aggSpan = tracer.Start(ctx, "AggregateResults",
+			trace.WithSpanKind(trace.SpanKindInternal),
+			trace.WithAttributes(
+				attribute.String("aggregation.mode", "same_trace_span_links"),
+				attribute.Bool("demo.agg_started_before_workers", true),
+			),
+		)
+		aggSpanCtx = aggSpan.SpanContext()
+	}
 
 	var wg sync.WaitGroup
 	for i, shard := range shardIDs {
@@ -100,6 +108,18 @@ func SameTraceSpanLinks(ctx context.Context) {
 				},
 			})
 		}
+	}
+
+	// Default behavior: start the aggregator AFTER workers, so its duration reflects only
+	// the aggregation step (not the shard query time).
+	if !enableForwardLinksToAggregator {
+		aggCtx, aggSpan = tracer.Start(ctx, "AggregateResults",
+			trace.WithSpanKind(trace.SpanKindInternal),
+			trace.WithAttributes(
+				attribute.String("aggregation.mode", "same_trace_span_links"),
+				attribute.Bool("demo.agg_started_before_workers", false),
+			),
+		)
 	}
 
 	aggSpan.SetAttributes(attribute.Int("shard.completed", len(links)))
